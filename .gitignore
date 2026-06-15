@@ -1,0 +1,34 @@
+# Виртуальные окружения Python
+venv/
+.venv/
+env/
+
+# Кэш Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyc
+
+# Переменные окружения (содержат пароли — никогда не коммитить!)
+.env
+*.env
+
+# База данных SQLite
+*.db
+*.sqlite3
+
+# Системные файлы macOS
+.DS_Store
+
+# Системные файлы Windows
+Thumbs.db
+desktop.ini
+
+# Редакторы
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Логи
+*.log

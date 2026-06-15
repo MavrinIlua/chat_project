@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Регистрация — ChatApp</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="auth-page">
+
+<div class="auth-card">
+  <h1 class="auth-card__title">Создать аккаунт</h1>
+
+  <form id="registerForm" novalidate>
+    <div class="field">
+      <label for="name">Имя</label>
+      <input type="text" id="name" name="name" placeholder="Алексей" autocomplete="given-name" required>
+    </div>
+
+    <div class="field">
+      <label for="surname">Фамилия</label>
+      <input type="text" id="surname" name="surname" placeholder="Иванов" autocomplete="family-name" required>
+    </div>
+
+    <div class="field">
+      <label for="login">Логин</label>
+      <input type="text" id="login" name="login" placeholder="username123" autocomplete="username" required>
+    </div>
+
+    <div class="field">
+      <label for="password">Пароль</label>
+      <input type="password" id="password" name="password" placeholder="Минимум 6 символов" autocomplete="new-password" required>
+    </div>
+
+    <button type="submit" class="btn">Зарегистрироваться</button>
+  </form>
+
+  <p class="auth-link">Уже есть аккаунт? <a href="{{ url_for('login') }}">Войти</a></p>
+</div>
+
+<script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>

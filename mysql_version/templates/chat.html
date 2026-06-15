@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <title>{{ partner.name }} {{ partner.surname }} — ChatApp</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+{# Корневой элемент с данными для JS (data-атрибуты — без серверного кода в JS) #}
+<div
+  id="chatApp"
+  class="messenger"
+  data-me-id="{{ me.id }}"
+  data-partner-id="{{ partner.id }}"
+>
+
+  {# ==================== БОКОВАЯ ПАНЕЛЬ ==================== #}
+  <aside class="sidebar">
+
+    {# Профиль текущего пользователя #}
+    <div class="sidebar__profile">
+      <div class="sidebar__profile-info">
+        <div class="avatar" data-color="{{ me.id % 8 }}">
+          {{ me.name[0] | upper }}{{ me.surname[0] | upper }}
+        </div>
+        <div>
+          <div class="sidebar__name">{{ me.name }} {{ me.surname[0] | upper }}.</div>
+          <div class="sidebar__status">● онлайн</div>
+        </div>
+      </div>
+      <a href="{{ url_for('logout') }}" class="sidebar__logout" title="Выйти">Выйти</a>
+    </div>
+
+    {# Поиск по контактам #}
+    <div class="sidebar__search">
+      <input id="sidebarSearch" type="text" placeholder="🔍 Поиск">
+    </div>
+
+    {# Список контактов #}
+    <nav class="sidebar__contacts" aria-label="Контакты">
+      {% for user in users %}
+      <a
+        href="{{ url_for('chat', partner_id=user.id) }}"
+        class="contact-item{% if user.id == partner.id %} is-active{% endif %}"
+      >
+        <div class="avatar" data-color="{{ user.id % 8 }}">
+          {{ user.name[0] | upper }}{{ user.surname[0] | upper }}
+        </div>
+        <div>
+          <div class="contact-item__name">{{ user.name }} {{ user.surname }}</div>
+          <div class="contact-item__login">@{{ user.login }}</div>
+        </div>
+      </a>
+      {% endfor %}
+    </nav>
+
+  </aside>
+
+  {# ==================== ОБЛАСТЬ ЧАТА ==================== #}
+  <main class="chat-area">
+
+    {# Шапка: собеседник #}
+    <header class="chat-area__header">
+      <div class="avatar avatar--lg" data-color="{{ partner.id % 8 }}">
+        {{ partner.name[0] | upper }}{{ partner.surname[0] | upper }}
+      </div>
+      <div>
+        <div class="chat-area__partner-name">{{ partner.name }} {{ partner.surname }}</div>
+        <div class="chat-area__partner-status">● онлайн</div>
+      </div>
+    </header>
+
+    {# Область сообщений — заполняется JavaScript #}
+    <section id="messagesArea" class="chat-area__messages" aria-live="polite" aria-label="Переписка">
+      {# Сообщения рендерит script.js #}
+    </section>
+
+    {# Панель ввода #}
+    <div class="chat-area__composer">
+      <div class="composer">
+        <input
+          id="messageInput"
+          type="text"
+          placeholder="Напишите сообщение..."
+          autocomplete="off"
+          maxlength="2000"
+          aria-label="Поле ввода сообщения"
+        >
+        <button id="sendBtn" class="composer__send" type="button">
+          Отправить ➤
+        </button>
+      </div>
+    </div>
+
+  </main>
+
+</div>{# /chatApp #}
+
+<script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>

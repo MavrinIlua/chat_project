@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Пользователи — ChatApp</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="users-page">
+
+<div class="users-card">
+  <div class="users-header">
+    <div class="users-header__info">
+      {# Аватарка текущего пользователя #}
+      <div class="avatar" data-color="{{ (me.id % 8) }}">
+        {{ me.name[0] | upper }}{{ me.surname[0] | upper }}
+      </div>
+      <div>
+        <div class="users-header__title">{{ me.name }} {{ me.surname }}</div>
+        <div class="users-header__sub">@{{ me.login }}</div>
+      </div>
+    </div>
+    <a href="{{ url_for('logout') }}" class="sidebar__logout">Выйти</a>
+  </div>
+
+  {# Поиск по пользователям #}
+  <div style="padding: 0.75rem 1rem; border-bottom: 1px solid var(--clr-border);">
+    <input
+      id="usersSearch"
+      type="text"
+      placeholder="🔍 Поиск по имени или логину"
+      style="width:100%; padding:0.5rem 0.8rem; font-size:0.83rem;
+             background:#f8fafc; border:1px solid var(--clr-border);
+             border-radius:2rem; outline:none; font-family:inherit;"
+    >
+  </div>
+
+  {% if users %}
+  <ul class="users-list">
+    {% for user in users %}
+    <li class="users-list__item">
+      <a href="{{ url_for('chat', partner_id=user.id) }}">
+        <div class="avatar" data-color="{{ user.id % 8 }}">
+          {{ user.name[0] | upper }}{{ user.surname[0] | upper }}
+        </div>
+        <div>
+          <div class="users-list__name">{{ user.name }} {{ user.surname }}</div>
+          <div class="users-list__login">@{{ user.login }}</div>
+        </div>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <div class="users-empty">
+    Пока нет других пользователей. Пригласи кого-нибудь!
+  </div>
+  {% endif %}
+</div>
+
+<script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
