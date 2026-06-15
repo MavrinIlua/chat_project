@@ -1,9 +1,12 @@
 """
 ChatApp — MySQL-версия
-Чат 1-на-1 с регистрацией, авторизацией и историей сообщений.
+Работает в двух режимах:
+  1. MySQL (если сервер доступен) — данные хранятся в БД
+  2. In-memory (если сервер недоступен) — данные хранятся в памяти приложения
 """
 
 import os
+import datetime
 from functools import wraps
 
 import mysql.connector
@@ -18,41 +21,65 @@ from werkzeug.security import check_password_hash, generate_password_hash
 # ---------------------------------------------------------------------------
 
 app = Flask(__name__)
-app.secret_key = os.getenv("SECRET_KEY", "секрет123")
+app.secret_key = os.getenv("SECRET_KEY", "secret123")
+app.config["JSON_AS_ASCII"] = False  # эмодзи и кириллица в JSON без экранирования
+
+# ---------------------------------------------------------------------------
+# Временное хранилище (in-memory fallback когда MySQL недоступен)
+# ---------------------------------------------------------------------------
+
+_temp_users: list[dict] = []     # [{id, name, surname, login, password_hash}]
+_temp_messages: list[dict] = []  # [{id, owner_id, deliver_id, text, date, time}]
+_temp_id_counter = {"user": 0, "msg": 0}
+
+
+def _next_id(kind: str) -> int:
+    _temp_id_counter[kind] += 1
+    return _temp_id_counter[kind]
+
 
 # ---------------------------------------------------------------------------
 # Подключение к базе данных
 # ---------------------------------------------------------------------------
 
-def get_db() -> mysql.connector.MySQLConnection:
-    """Возвращает соединение с MySQL, создаёт его при первом обращении за запрос."""
+def get_db():
+    """
+    Возвращает соединение с MySQL или None если сервер недоступен.
+    Соединение создаётся один раз за запрос и кешируется в g.
+    """
     if "db" not in g:
-        g.db = mysql.connector.connect(
-            host=os.getenv("DB_HOST", "185.114.247.43"),
-            database=os.getenv("DB_NAME", "sch688_maga1"),
-            user=os.getenv("DB_USER", "sch688_maga1"),
-            password=os.getenv("DB_PASSWORD", "Fqx8irSU"),
-            charset="utf8mb4",
-            collation="utf8mb4_unicode_ci",
-        )
+        # Если .env закомментирован / переменные не заданы — не пытаемся подключаться
+        host = os.getenv("DB_HOST", "")
+        if not host:
+            g.db = None
+            return None
+        try:
+            g.db = mysql.connector.connect(
+                host=host,
+                database=os.getenv("DB_NAME", ""),
+                user=os.getenv("DB_USER", ""),
+                password=os.getenv("DB_PASSWORD", ""),
+                charset="utf8mb4",
+                collation="utf8mb4_unicode_ci",
+                connection_timeout=3,
+            )
+        except Exception:
+            g.db = None
     return g.db
 
 
 @app.teardown_appcontext
 def close_db(error):
-    """Закрывает соединение после завершения запроса."""
     db = g.pop("db", None)
     if db is not None and db.is_connected():
         db.close()
 
 
 def query(sql: str, params: tuple = (), *, one: bool = False, commit: bool = False):
-    """
-    Универсальная обёртка для SQL-запросов.
-    one=True    — вернуть одну строку (или None).
-    commit=True — для INSERT/UPDATE/DELETE, возвращает lastrowid.
-    """
+    """Универсальная обёртка для SQL-запросов. Возвращает None если нет БД."""
     db = get_db()
+    if db is None:
+        return None
     cursor = db.cursor(dictionary=True)
     cursor.execute(sql, params)
     if commit:
@@ -66,12 +93,13 @@ def query(sql: str, params: tuple = (), *, one: bool = False, commit: bool = Fal
 
 
 # ---------------------------------------------------------------------------
-# Инициализация таблиц (создаём, если не существуют)
+# Инициализация таблиц
 # ---------------------------------------------------------------------------
 
 def init_db():
-    """Создаёт таблицы users и messages при первом запуске."""
     db = get_db()
+    if db is None:
+        return
     cursor = db.cursor()
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
@@ -99,17 +127,32 @@ def init_db():
 
 
 # ---------------------------------------------------------------------------
-# Декоратор защиты маршрутов
+# Утилиты
 # ---------------------------------------------------------------------------
 
+def get_greeting() -> str:
+    hour = datetime.datetime.now().hour
+    if 5 <= hour < 12:
+        return "Доброе утро"
+    elif 12 <= hour < 18:
+        return "Добрый день"
+    elif 18 <= hour < 23:
+        return "Добрый вечер"
+    return "Доброй ночи"
+
+
 def login_required(f):
-    """Перенаправляет неавторизованных пользователей на страницу входа."""
     @wraps(f)
     def wrapper(*args, **kwargs):
         if "user_id" not in session:
             return redirect(url_for("login"))
         return f(*args, **kwargs)
     return wrapper
+
+
+def db_mode() -> str:
+    """Возвращает 'mysql' или 'memory' — для шаблонов и логов."""
+    return "mysql" if get_db() is not None else "memory"
 
 
 # ---------------------------------------------------------------------------
@@ -123,14 +166,14 @@ def index():
     return redirect(url_for("register"))
 
 
-@app.route("/register", methods=["GET"])
+@app.route("/register")
 def register():
-    return render_template("registration.html")
+    return render_template("registration.html", greeting=get_greeting())
 
 
-@app.route("/login", methods=["GET"])
+@app.route("/login")
 def login():
-    return render_template("avtorization.html")
+    return render_template("avtorization.html", greeting=get_greeting())
 
 
 @app.route("/logout")
@@ -140,12 +183,11 @@ def logout():
 
 
 # ---------------------------------------------------------------------------
-# API — Регистрация и авторизация
+# API — Регистрация
 # ---------------------------------------------------------------------------
 
 @app.route("/api/register", methods=["POST"])
 def api_register():
-    """Регистрация. Принимает JSON: name, surname, login, password."""
     data     = request.get_json(silent=True) or {}
     name     = data.get("name", "").strip()
     surname  = data.get("surname", "").strip()
@@ -154,31 +196,42 @@ def api_register():
 
     if not all([name, surname, login_, password]):
         return jsonify({"ok": False, "message": "Заполните все поля"}), 400
+    if len(password) < 4:
+        return jsonify({"ok": False, "message": "Пароль — минимум 4 символа"}), 400
 
-    if len(password) < 6:
-        return jsonify({"ok": False, "message": "Пароль — минимум 6 символов"}), 400
+    hashed = generate_password_hash(password)
 
-    if query("SELECT id FROM users WHERE login = %s", (login_,), one=True):
-        return jsonify({"ok": False, "message": "Логин уже занят"}), 409
-
-    hashed  = generate_password_hash(password)
-    user_id = query(
-        "INSERT INTO users (name, surname, login, password) VALUES (%s, %s, %s, %s)",
-        (name, surname, login_, hashed),
-        commit=True,
-    )
+    if get_db() is not None:
+        # --- MySQL режим ---
+        if query("SELECT id FROM users WHERE login = %s", (login_,), one=True):
+            return jsonify({"ok": False, "message": "Логин уже занят"}), 409
+        user_id = query(
+            "INSERT INTO users (name, surname, login, password) VALUES (%s,%s,%s,%s)",
+            (name, surname, login_, hashed), commit=True,
+        )
+    else:
+        # --- In-memory режим ---
+        if any(u["login"] == login_ for u in _temp_users):
+            return jsonify({"ok": False, "message": "Логин уже занят"}), 409
+        user_id = _next_id("user")
+        _temp_users.append({
+            "id": user_id, "name": name, "surname": surname,
+            "login": login_, "password": hashed,
+        })
 
     session["user_id"]      = user_id
     session["user_login"]   = login_
     session["user_name"]    = name
     session["user_surname"] = surname
-
     return jsonify({"ok": True, "user_id": user_id}), 201
 
 
+# ---------------------------------------------------------------------------
+# API — Авторизация
+# ---------------------------------------------------------------------------
+
 @app.route("/api/login", methods=["POST"])
 def api_login():
-    """Авторизация. Принимает JSON: login, password."""
     data     = request.get_json(silent=True) or {}
     login_   = data.get("login", "").strip()
     password = data.get("password", "").strip()
@@ -186,73 +239,91 @@ def api_login():
     if not login_ or not password:
         return jsonify({"ok": False, "message": "Введите логин и пароль"}), 400
 
-    user = query(
-        "SELECT id, name, surname, login, password FROM users WHERE login = %s",
-        (login_,),
-        one=True,
-    )
-
-    if not user or not check_password_hash(user["password"], password):
-        return jsonify({"ok": False, "message": "Неверный логин или пароль"}), 401
+    if get_db() is not None:
+        # --- MySQL режим ---
+        user = query(
+            "SELECT id, name, surname, login, password FROM users WHERE login = %s",
+            (login_,), one=True,
+        )
+        if not user or not check_password_hash(user["password"], password):
+            return jsonify({"ok": False, "message": "Неверный логин или пароль"}), 401
+    else:
+        # --- In-memory режим ---
+        user = next((u for u in _temp_users if u["login"] == login_), None)
+        if not user or not check_password_hash(user["password"], password):
+            return jsonify({"ok": False, "message": "Неверный логин или пароль"}), 401
 
     session["user_id"]      = user["id"]
     session["user_login"]   = user["login"]
     session["user_name"]    = user["name"]
     session["user_surname"] = user["surname"]
-
     return jsonify({"ok": True, "user_id": user["id"]}), 200
 
 
 # ---------------------------------------------------------------------------
-# Страница со списком пользователей
+# Список пользователей
 # ---------------------------------------------------------------------------
 
 @app.route("/users")
 @login_required
 def users_list():
-    """Список всех пользователей кроме текущего — для выбора собеседника."""
-    users = query(
-        "SELECT id, name, surname, login FROM users WHERE id != %s ORDER BY name",
-        (session["user_id"],),
-    )
+    me_id = session["user_id"]
+    if get_db() is not None:
+        users = query(
+            "SELECT id, name, surname, login FROM users WHERE id != %s ORDER BY name",
+            (me_id,),
+        ) or []
+    else:
+        users = [
+            {"id": u["id"], "name": u["name"], "surname": u["surname"], "login": u["login"]}
+            for u in _temp_users if u["id"] != me_id
+        ]
+
     me = {
-        "id":      session["user_id"],
-        "name":    session["user_name"],
-        "surname": session["user_surname"],
-        "login":   session["user_login"],
+        "id": me_id, "name": session["user_name"],
+        "surname": session["user_surname"], "login": session["user_login"],
     }
-    return render_template("users.html", users=users, me=me)
+    return render_template("users.html", users=users, me=me,
+                           greeting=get_greeting(), mode=db_mode())
 
 
 # ---------------------------------------------------------------------------
-# Страница чата 1-на-1
+# Чат 1-на-1
 # ---------------------------------------------------------------------------
 
 @app.route("/chat/<int:partner_id>")
 @login_required
 def chat(partner_id: int):
-    """Открывает чат с конкретным пользователем."""
     me_id = session["user_id"]
 
-    partner = query(
-        "SELECT id, name, surname, login FROM users WHERE id = %s",
-        (partner_id,),
-        one=True,
-    )
+    if get_db() is not None:
+        partner = query(
+            "SELECT id, name, surname, login FROM users WHERE id = %s",
+            (partner_id,), one=True,
+        )
+        users = query(
+            "SELECT id, name, surname, login FROM users WHERE id != %s ORDER BY name",
+            (me_id,),
+        ) or []
+    else:
+        partner = next(
+            ({"id": u["id"], "name": u["name"], "surname": u["surname"], "login": u["login"]}
+             for u in _temp_users if u["id"] == partner_id), None
+        )
+        users = [
+            {"id": u["id"], "name": u["name"], "surname": u["surname"], "login": u["login"]}
+            for u in _temp_users if u["id"] != me_id
+        ]
+
     if not partner:
         return redirect(url_for("users_list"))
 
-    users = query(
-        "SELECT id, name, surname, login FROM users WHERE id != %s ORDER BY name",
-        (me_id,),
-    )
     me = {
-        "id":      me_id,
-        "name":    session["user_name"],
-        "surname": session["user_surname"],
-        "login":   session["user_login"],
+        "id": me_id, "name": session["user_name"],
+        "surname": session["user_surname"], "login": session["user_login"],
     }
-    return render_template("chat.html", me=me, partner=partner, users=users)
+    return render_template("chat.html", me=me, partner=partner, users=users,
+                           greeting=get_greeting(), mode=db_mode())
 
 
 # ---------------------------------------------------------------------------
@@ -262,44 +333,52 @@ def chat(partner_id: int):
 @app.route("/api/messages/<int:partner_id>", methods=["GET"])
 @login_required
 def api_get_messages(partner_id: int):
-    """Возвращает историю переписки с партнёром (JSON)."""
     me_id = session["user_id"]
-    messages = query(
-        """
-        SELECT
-            m.id,
-            m.owner_id,
-            m.deliver_id,
-            m.text,
-            DATE_FORMAT(m.sent_at, '%%d.%%m.%%Y') AS date,
-            DATE_FORMAT(m.sent_at, '%%H:%%i')     AS time
-        FROM messages m
-        WHERE (m.owner_id = %s AND m.deliver_id = %s)
-           OR (m.owner_id = %s AND m.deliver_id = %s)
-        ORDER BY m.sent_at ASC
-        LIMIT 200
-        """,
-        (me_id, partner_id, partner_id, me_id),
-    )
-    return jsonify(messages or [])
+    if get_db() is not None:
+        messages = query(
+            """
+            SELECT m.id, m.owner_id, m.deliver_id, m.text,
+                   DATE_FORMAT(m.sent_at, '%%d.%%m.%%Y') AS date,
+                   DATE_FORMAT(m.sent_at, '%%H:%%i')     AS time
+            FROM messages m
+            WHERE (m.owner_id = %s AND m.deliver_id = %s)
+               OR (m.owner_id = %s AND m.deliver_id = %s)
+            ORDER BY m.sent_at ASC LIMIT 200
+            """,
+            (me_id, partner_id, partner_id, me_id),
+        ) or []
+    else:
+        messages = [
+            m for m in _temp_messages
+            if (m["owner_id"] == me_id and m["deliver_id"] == partner_id)
+            or (m["owner_id"] == partner_id and m["deliver_id"] == me_id)
+        ]
+    return jsonify(messages)
 
 
 @app.route("/api/messages/<int:partner_id>", methods=["POST"])
 @login_required
 def api_send_message(partner_id: int):
-    """Сохраняет новое сообщение. Принимает JSON: text."""
     data = request.get_json(silent=True) or {}
     text = data.get("text", "").strip()
-
     if not text:
         return jsonify({"ok": False, "message": "Пустое сообщение"}), 400
 
-    me_id  = session["user_id"]
-    msg_id = query(
-        "INSERT INTO messages (owner_id, deliver_id, text) VALUES (%s, %s, %s)",
-        (me_id, partner_id, text),
-        commit=True,
-    )
+    me_id = session["user_id"]
+    if get_db() is not None:
+        msg_id = query(
+            "INSERT INTO messages (owner_id, deliver_id, text) VALUES (%s,%s,%s)",
+            (me_id, partner_id, text), commit=True,
+        )
+    else:
+        now = datetime.datetime.now()
+        msg_id = _next_id("msg")
+        _temp_messages.append({
+            "id": msg_id, "owner_id": me_id, "deliver_id": partner_id,
+            "text": text,
+            "date": now.strftime("%d.%m.%Y"),
+            "time": now.strftime("%H:%M"),
+        })
     return jsonify({"ok": True, "id": msg_id}), 201
 
 
@@ -308,7 +387,6 @@ def api_send_message(partner_id: int):
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    # Загружаем .env, если установлен python-dotenv
     try:
         from dotenv import load_dotenv
         load_dotenv()
@@ -318,4 +396,4 @@ if __name__ == "__main__":
     with app.app_context():
         init_db()
 
-    app.run(debug=True, port=5000)  # MySQL-версия: http://127.0.0.1:5000
+    app.run(debug=True, port=5000)
