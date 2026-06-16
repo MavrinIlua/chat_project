@@ -1,12 +1,20 @@
+/* ============================================================
+   ChatApp — клиентский JS (fetch API, без jQuery)
+   Кодировка: UTF-8, emoji поддерживаются нативно
+   ============================================================ */
 "use strict";
 
 /* ── Утилиты ─────────────────────────────────────────────── */
 
 function showAlert(form, message, type) {
   let el = form.querySelector(".alert");
-  if (!el) { el = document.createElement("p"); el.className = "alert"; form.appendChild(el); }
+  if (!el) {
+    el = document.createElement("p");
+    el.className = "alert";
+    form.appendChild(el);
+  }
   el.textContent = message;
-  el.className = `alert ${type}`;
+  el.className = "alert " + type;
 }
 
 async function postJSON(url, body) {
@@ -20,18 +28,20 @@ async function postJSON(url, body) {
 }
 
 function escapeHtml(str) {
-  return str.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
-            .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+  return str
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
 }
 
-/* ── Регистрация ─────────────────────────────────────────── */
+/* ── Форма регистрации ───────────────────────────────────── */
 
 const registerForm = document.getElementById("registerForm");
 if (registerForm) {
   registerForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     const btn = registerForm.querySelector(".btn");
-    btn.disabled = true; btn.textContent = "Создаём...";
+    btn.disabled    = true;
+    btn.textContent = "Создаём аккаунт...";
 
     const { ok, data } = await postJSON("/api/register", {
       name:     registerForm.name.value.trim(),
@@ -41,23 +51,25 @@ if (registerForm) {
     }).catch(() => ({ ok: false, data: { message: "Ошибка сети" } }));
 
     if (ok) {
-      showAlert(registerForm, "Аккаунт создан! ✅", "success");
-      setTimeout(() => (window.location.href = "/users"), 700);
+      showAlert(registerForm, "✅ Аккаунт создан! Переходим...", "success");
+      setTimeout(() => { window.location.href = "/users"; }, 700);
     } else {
       showAlert(registerForm, data.message || "Что-то пошло не так", "error");
-      btn.disabled = false; btn.textContent = "Зарегистрироваться";
+      btn.disabled    = false;
+      btn.textContent = "Зарегистрироваться ✨";
     }
   });
 }
 
-/* ── Авторизация ─────────────────────────────────────────── */
+/* ── Форма входа ─────────────────────────────────────────── */
 
 const loginForm = document.getElementById("loginForm");
 if (loginForm) {
   loginForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     const btn = loginForm.querySelector(".btn");
-    btn.disabled = true; btn.textContent = "Входим...";
+    btn.disabled    = true;
+    btn.textContent = "Входим...";
 
     const { ok, data } = await postJSON("/api/login", {
       login:    loginForm.login.value.trim(),
@@ -65,16 +77,17 @@ if (loginForm) {
     }).catch(() => ({ ok: false, data: { message: "Ошибка сети" } }));
 
     if (ok) {
-      showAlert(loginForm, "Добро пожаловать! 🎉", "success");
-      setTimeout(() => (window.location.href = "/users"), 600);
+      showAlert(loginForm, "✅ Добро пожаловать!", "success");
+      setTimeout(() => { window.location.href = "/users"; }, 600);
     } else {
       showAlert(loginForm, data.message || "Неверный логин или пароль", "error");
-      btn.disabled = false; btn.textContent = "Войти";
+      btn.disabled    = false;
+      btn.textContent = "Войти →";
     }
   });
 }
 
-/* ── Поиск по пользователям ──────────────────────────────── */
+/* ── Поиск на странице пользователей ────────────────────── */
 
 const usersSearch = document.getElementById("usersSearch");
 if (usersSearch) {
@@ -90,23 +103,16 @@ if (usersSearch) {
 
 const chatApp = document.getElementById("chatApp");
 if (chatApp) {
-  const ME_ID      = Number(chatApp.dataset.meId);
-  const PARTNER_ID = Number(chatApp.dataset.partnerId);
+  const cfg        = window.__CHAT__;
+  const ME_ID      = cfg.meId;
+  const PARTNER_ID = cfg.partnerId;
+  const GREETING   = cfg.greeting;
+
   const messagesArea = document.getElementById("messagesArea");
   const messageInput = document.getElementById("messageInput");
   const sendBtn      = document.getElementById("sendBtn");
 
-  // Приветствие при входе в чат
-  const greetingEl = document.getElementById("greetingData");
-  if (greetingEl) {
-    const greeting = greetingEl.dataset.greeting;
-    const div = document.createElement("div");
-    div.className = "chat-greeting";
-    div.innerHTML = `<span class="chat-greeting__text">👋 ${escapeHtml(greeting)}! Начало переписки</span>`;
-    messagesArea.appendChild(div);
-  }
-
-  // Поиск по контактам
+  // Поиск в сайдбаре
   const sidebarSearch = document.getElementById("sidebarSearch");
   if (sidebarSearch) {
     sidebarSearch.addEventListener("input", () => {
@@ -117,56 +123,71 @@ if (chatApp) {
     });
   }
 
-  /* Рендер сообщений */
+  /* --- Рендер сообщений --- */
+
   let lastDate      = null;
   let lastMessageId = 0;
-  let firstLoad     = true;
+  let isFirstLoad   = true;
+  let greetingShown = false;
 
   function buildMessage(msg) {
     const frag   = document.createDocumentFragment();
     const isSent = msg.owner_id === ME_ID;
 
-    // Разделитель по дате
+    // Разделитель даты
     if (msg.date !== lastDate) {
       lastDate = msg.date;
       const div = document.createElement("div");
-      div.className = "date-divider";
+      div.className   = "date-divider";
       div.textContent = msg.date;
       frag.appendChild(div);
     }
 
     const wrap = document.createElement("div");
-    wrap.className = `message ${isSent ? "sent" : "received"}`;
-    wrap.innerHTML = `
-      <div class="bubble">
-        ${escapeHtml(msg.text)}
-        <span class="bubble__time">${msg.time}</span>
-      </div>`;
+    wrap.className = "message " + (isSent ? "sent" : "received");
+    wrap.innerHTML =
+      '<div class="bubble">' +
+        escapeHtml(msg.text) +
+        '<span class="bubble__time">' + escapeHtml(msg.time) + '</span>' +
+      '</div>';
     frag.appendChild(wrap);
     return frag;
   }
 
+  function showGreeting() {
+    if (greetingShown) return;
+    greetingShown = true;
+    const banner = document.createElement("div");
+    banner.className = "greeting-banner";
+    banner.innerHTML = "👋 " + escapeHtml(GREETING) + "! Начните общение.";
+    messagesArea.appendChild(banner);
+  }
+
+  /* --- Загрузка сообщений --- */
+
   async function loadMessages() {
     try {
-      const res  = await fetch(`/api/messages/${PARTNER_ID}`);
+      const res  = await fetch("/api/messages/" + PARTNER_ID);
       const msgs = await res.json();
-      if (!Array.isArray(msgs) || msgs.length === 0) return;
+      if (!Array.isArray(msgs)) return;
 
-      const newMsgs = firstLoad ? msgs : msgs.filter(m => m.id > lastMessageId);
-      if (newMsgs.length === 0) return;
+      const newMsgs = isFirstLoad
+        ? msgs
+        : msgs.filter((m) => m.id > lastMessageId);
 
-      if (firstLoad) {
-        // Убираем только дубль приветствия при первой загрузке реальных сообщений
-        firstLoad = false;
-        lastDate  = null;
+      if (isFirstLoad) {
+        messagesArea.innerHTML = "";
+        lastDate = null;
+        isFirstLoad = false;
+        if (msgs.length === 0) showGreeting();
       }
 
-      newMsgs.forEach(msg => {
+      newMsgs.forEach((msg) => {
         messagesArea.appendChild(buildMessage(msg));
         if (msg.id > lastMessageId) lastMessageId = msg.id;
       });
 
-      // Прокрутка вниз если пользователь внизу
+      // Скролл вниз если пользователь у конца
       const nearBottom =
         messagesArea.scrollHeight - messagesArea.scrollTop - messagesArea.clientHeight < 150;
       if (nearBottom) messagesArea.scrollTop = messagesArea.scrollHeight;
@@ -176,21 +197,19 @@ if (chatApp) {
     }
   }
 
+  /* --- Отправка --- */
+
   async function sendMessage() {
     const text = messageInput.value.trim();
     if (!text) return;
+
     messageInput.value = "";
     sendBtn.disabled   = true;
 
     try {
-      const { ok, data } = await postJSON(`/api/messages/${PARTNER_ID}`, { text });
-      if (ok) {
-        await loadMessages();
-        messagesArea.scrollTop = messagesArea.scrollHeight;
-      } else {
-        messageInput.value = text;
-        console.error(data.message);
-      }
+      const { ok } = await postJSON("/api/messages/" + PARTNER_ID, { text });
+      if (ok) await loadMessages();
+      else messageInput.value = text;
     } catch {
       messageInput.value = text;
     } finally {
@@ -204,7 +223,7 @@ if (chatApp) {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   });
 
-  // Polling — каждые 4 секунды
+  // Polling каждые 4 секунды
   loadMessages();
   setInterval(loadMessages, 4000);
 }

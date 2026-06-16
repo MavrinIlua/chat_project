@@ -3,32 +3,26 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Пользователи — ChatApp</title>
+  <title>Чаты — ChatApp</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body class="users-page">
 <div class="users-card">
   <div class="users-header">
-    <div style="display:flex;align-items:center;gap:.7rem;">
-      <div class="avatar avatar--sm" data-color="{{ me.id % 8 }}">
-        {{ me.name[0]|upper }}{{ me.surname[0]|upper }}
+    <div class="users-header__info">
+      <div class="avatar avatar--lg" data-color="{{ me.id % 8 }}">
+        {{ me.name[0] | upper }}{{ me.surname[0] | upper }}
       </div>
       <div>
-        <div class="users-header__name">{{ me.name }} {{ me.surname }}</div>
-        <div class="users-header__sub">@{{ me.login }}
-          {% if mode == 'mysql' %}
-            <span class="mode-badge mode-badge--mysql">MySQL ✓</span>
-          {% else %}
-            <span class="mode-badge mode-badge--memory">без БД</span>
-          {% endif %}
-        </div>
+        <div class="users-header__name">{{ greeting }}, {{ me.name }}! 👋</div>
+        <div class="users-header__greeting">@{{ me.login }}</div>
       </div>
     </div>
-    <a href="{{ url_for('logout') }}" class="logout-btn">Выйти</a>
+    <a href="{{ url_for('logout') }}" class="users-header__logout">Выйти</a>
   </div>
 
-  <div class="search-wrap">
-    <input id="usersSearch" type="text" placeholder="🔍 Поиск по имени или логину">
+  <div class="users-search">
+    <input id="usersSearch" type="text" placeholder="🔍 Найти пользователя">
   </div>
 
   {% if users %}
@@ -37,7 +31,7 @@
     <li class="users-list__item">
       <a href="{{ url_for('chat', partner_id=user.id) }}">
         <div class="avatar" data-color="{{ user.id % 8 }}">
-          {{ user.name[0]|upper }}{{ user.surname[0]|upper }}
+          {{ user.name[0] | upper }}{{ user.surname[0] | upper }}
         </div>
         <div>
           <div class="users-list__name">{{ user.name }} {{ user.surname }}</div>
@@ -48,7 +42,9 @@
     {% endfor %}
   </ul>
   {% else %}
-  <div class="users-empty">Пока нет других пользователей 🙁<br>Зарегистрируй кого-нибудь ещё!</div>
+  <div class="users-empty">
+    😔 Пока нет других пользователей.<br>Пригласи кого-нибудь!
+  </div>
   {% endif %}
 </div>
 <script src="{{ url_for('static', filename='js/script.js') }}"></script>

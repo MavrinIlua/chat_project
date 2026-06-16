@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ partner['nickname'] }} — ChatApp</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+<div id="directApp" class="messenger"
+     data-me-id="{{ me_id }}"
+     data-partner-id="{{ partner['id'] }}">
+
+  <!-- САЙДБАР -->
+  <aside class="sidebar">
+    <div class="sidebar__header">
+      <div class="sidebar__profile">
+        <div class="avatar" data-color="{{ me_id % 8 }}">
+          {{ me_nickname[0]|upper }}
+        </div>
+        <div>
+          <div class="sidebar__name">{{ me_nickname }}</div>
+          <div class="sidebar__status">● онлайн</div>
+        </div>
+      </div>
+      <a href="{{ url_for('logout') }}" class="sidebar__logout">Выйти</a>
+    </div>
+
+    <div class="sidebar__search">
+      <input id="sidebarSearch" type="text" placeholder="🔍 Поиск">
+    </div>
+
+    <nav class="sidebar__contacts">
+      <a href="{{ url_for('chat') }}" class="contact-item">
+        <div class="avatar" data-color="4">💬</div>
+        <div>
+          <div class="contact-item__name">Общий чат</div>
+          <div class="contact-item__login">все участники</div>
+        </div>
+      </a>
+      {% for user in users %}
+      <a href="{{ url_for('direct', partner_id=user['id']) }}"
+         class="contact-item{% if user['id'] == partner['id'] %} is-active{% endif %}">
+        <div class="avatar" data-color="{{ user['id'] % 8 }}">
+          {{ user['nickname'][0]|upper }}
+        </div>
+        <div>
+          <div class="contact-item__name">{{ user['nickname'] }}</div>
+          <div class="contact-item__login">личный чат</div>
+        </div>
+      </a>
+      {% endfor %}
+    </nav>
+  </aside>
+
+  <!-- ОБЛАСТЬ ЧАТА -->
+  <main class="chat-area">
+    <header class="chat-area__header">
+      <div class="avatar avatar--lg" data-color="{{ partner['id'] % 8 }}">
+        {{ partner['nickname'][0]|upper }}
+      </div>
+      <div>
+        <div class="chat-area__partner-name">{{ partner['nickname'] }}</div>
+        <div class="chat-area__partner-status">● личный чат</div>
+      </div>
+    </header>
+
+    <section id="messagesArea" class="chat-area__messages" aria-live="polite">
+      <div class="chat-greeting">{{ greeting }} 👋 Личный чат с {{ partner['nickname'] }}</div>
+    </section>
+
+    <div class="chat-area__composer">
+      <div class="composer">
+        <input id="messageInput" type="text"
+               placeholder="Напишите сообщение... 😊"
+               autocomplete="off" maxlength="2000">
+        <button id="sendBtn" class="composer__send" type="button">Отправить ➤</button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+"use strict";
+const directApp  = document.getElementById("directApp");
+const ME_ID      = Number(directApp.dataset.meId);
+const PARTNER_ID = Number(directApp.dataset.partnerId);
+const area       = document.getElementById("messagesArea");
+const input      = document.getElementById("messageInput");
+const btn        = document.getElementById("sendBtn");
+
+const sidebarSearch = document.getElementById("sidebarSearch");
+if (sidebarSearch) {
+  sidebarSearch.addEventListener("input", () => {
+    const q = sidebarSearch.value.toLowerCase();
+    document.querySelectorAll(".contact-item").forEach(el => {
+      el.style.display = el.textContent.toLowerCase().includes(q) ? "" : "none";
+    });
+  });
+}
+
+let lastId = 0, lastDate = null, firstLoad = true;
+
+function esc(s) {
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;")
+          .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+function buildMsg(m) {
+  const frag = document.createDocumentFragment();
+  const isSent = m.owner_id === ME_ID;
+  if (m.sent_date !== lastDate) {
+    lastDate = m.sent_date;
+    const d = document.createElement("div");
+    d.className = "date-divider";
+    d.innerHTML = `<span>${m.sent_date}</span>`;
+    frag.appendChild(d);
+  }
+  const w = document.createElement("div");
+  w.className = `message ${isSent ? "sent" : "received"}`;
+  w.innerHTML = `<div class="bubble">${esc(m.text)}<span class="bubble__time">${m.sent_time}</span></div>`;
+  frag.appendChild(w);
+  return frag;
+}
+
+async function load() {
+  const res  = await fetch(`/api/direct/${PARTNER_ID}`);
+  const msgs = await res.json();
+  if (!msgs.length) return;
+  const newMsgs = firstLoad ? msgs : msgs.filter(m => m.id > lastId);
+  if (!newMsgs.length) return;
+  if (firstLoad) { area.innerHTML = ""; lastDate = null; firstLoad = false; }
+  newMsgs.forEach(m => { area.appendChild(buildMsg(m)); if (m.id > lastId) lastId = m.id; });
+  area.scrollTop = area.scrollHeight;
+}
+
+async function send() {
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = ""; btn.disabled = true;
+  await fetch(`/api/direct/${PARTNER_ID}`, {
+    method: "POST",
+    headers: {"Content-Type": "application/json; charset=utf-8"},
+    body: JSON.stringify({text}),
+  });
+  await load();
+  btn.disabled = false; input.focus();
+}
+
+btn.addEventListener("click", send);
+input.addEventListener("keydown", e => { if (e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();} });
+load();
+setInterval(load, 4000);
+</script>
+</body>
+</html>

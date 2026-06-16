@@ -14,8 +14,8 @@
   <!-- САЙДБАР -->
   <aside class="sidebar">
     <div class="sidebar__header">
-      <div class="sidebar__info">
-        <div class="avatar avatar--sm" data-color="{{ me.id % 8 }}">
+      <div class="sidebar__user">
+        <div class="avatar" data-color="{{ me.id % 8 }}">
           {{ me.name[0]|upper }}{{ me.surname[0]|upper }}
         </div>
         <div>
@@ -23,7 +23,7 @@
           <div class="sidebar__status">● онлайн</div>
         </div>
       </div>
-      <a href="{{ url_for('logout') }}" class="logout-btn">Выйти</a>
+      <a href="{{ url_for('logout') }}" class="sidebar__logout">Выйти</a>
     </div>
 
     <div class="sidebar__search">
@@ -34,7 +34,7 @@
       {% for user in users %}
       <a href="{{ url_for('chat', partner_id=user.id) }}"
          class="contact-item{% if user.id == partner.id %} is-active{% endif %}">
-        <div class="avatar avatar--sm" data-color="{{ user.id % 8 }}">
+        <div class="avatar" data-color="{{ user.id % 8 }}">
           {{ user.name[0]|upper }}{{ user.surname[0]|upper }}
         </div>
         <div>
@@ -46,7 +46,7 @@
     </nav>
   </aside>
 
-  <!-- ЧАТ -->
+  <!-- ОБЛАСТЬ ЧАТА -->
   <main class="chat-area">
     <header class="chat-area__header">
       <div class="avatar avatar--lg" data-color="{{ partner.id % 8 }}">
@@ -59,13 +59,13 @@
     </header>
 
     <section id="messagesArea" class="chat-area__messages" aria-live="polite">
-      <!-- приветствие появляется через JS -->
+      <!-- Приветствие появится через JS -->
     </section>
 
     <div class="chat-area__composer">
       <div class="composer">
         <input id="messageInput" type="text"
-               placeholder="Напишите сообщение... 😊"
+               placeholder="Напишите сообщение... (Enter — отправить)"
                autocomplete="off" maxlength="2000">
         <button id="sendBtn" class="composer__send" type="button">➤</button>
       </div>
@@ -74,9 +74,14 @@
 
 </div>
 
-<!-- Передаём приветствие в JS через data-атрибут -->
-<div id="greetingData" data-greeting="{{ greeting }}" style="display:none"></div>
-
+<script>
+  // Передаём данные из шаблона в JS без eval
+  window.__CHAT__ = {
+    meId:      {{ me.id }},
+    partnerId: {{ partner.id }},
+    greeting:  {{ greeting | tojson }}
+  };
+</script>
 <script src="{{ url_for('static', filename='js/script.js') }}"></script>
 </body>
 </html>
