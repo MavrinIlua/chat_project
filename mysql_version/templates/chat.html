@@ -58,12 +58,23 @@
       </div>
     </header>
 
-    <section id="messagesArea" class="chat-area__messages" aria-live="polite">
-      <!-- Приветствие появится через JS -->
-    </section>
+    <section id="messagesArea" class="chat-area__messages" aria-live="polite"></section>
 
+    <!-- Панель ввода -->
     <div class="chat-area__composer">
+      <!-- Emoji панель -->
+      <div id="emojiPanel" class="emoji-panel" hidden>
+        <div class="emoji-panel__grid">
+          😀 😂 😍 🥰 😎 😭 😡 🤔 👍 👎 ❤️ 🔥 💯 🎉 🙏 😘
+          😊 🤣 😅 😆 😋 😜 🤩 😴 🤯 🥺 😬 🤗 😇 🤓 👀 💀
+          🫶 💪 🙌 ✌️ 🤝 🫡 👏 🤙 💅 🖐️ ✋ 🤞 🫰 👌 🤌 🫳
+          🍕 🍔 🍟 🌮 🍜 🍣 🍩 🍪 🎂 🍫 ☕ 🧋 🍺 🥂 🍾 🎁
+          🚀 🌟 ⭐ 🌙 ☀️ 🌈 ⚡ 🌊 🎵 🎮 📱 💻 📚 🏆 🎯 💡
+        </div>
+      </div>
+
       <div class="composer">
+        <button id="emojiBtn" class="composer__emoji" type="button" title="Emoji">😊</button>
         <input id="messageInput" type="text"
                placeholder="Напишите сообщение... (Enter — отправить)"
                autocomplete="off" maxlength="2000">
@@ -74,8 +85,19 @@
 
 </div>
 
+<!-- Модалка редактирования -->
+<div id="editModal" class="modal" hidden>
+  <div class="modal__box">
+    <div class="modal__title">✏️ Редактировать сообщение</div>
+    <input id="editInput" type="text" class="modal__input" maxlength="2000">
+    <div class="modal__actions">
+      <button id="editCancel" class="modal__btn modal__btn--cancel">Отмена</button>
+      <button id="editSave"   class="modal__btn modal__btn--save">Сохранить</button>
+    </div>
+  </div>
+</div>
+
 <script>
-  // Передаём данные из шаблона в JS без eval
   window.__CHAT__ = {
     meId:      {{ me.id }},
     partnerId: {{ partner.id }},

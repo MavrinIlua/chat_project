@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=yes">
+  <title>{{ current_chat.name }} — ChatApp</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="messenger">
+
+  <!-- ═══ САЙДБАР ═══ -->
+  <aside class="sidebar">
+    <!-- Шапка профиля -->
+    <div class="sidebar__head">
+      <div class="sidebar__me">
+        <div class="avatar avatar--md" data-color="{{ user_id % 8 }}">
+          {{ nickname[0]|upper }}
+        </div>
+        <div>
+          <div class="sidebar__name">{{ nickname }}</div>
+          <div class="sidebar__status">● онлайн</div>
+        </div>
+      </div>
+      <a href="{{ url_for('logout') }}" class="sidebar__logout">Выйти</a>
+    </div>
+
+    <!-- Поиск -->
+    <div style="padding:.55rem .85rem;border-bottom:1px solid var(--clr-border);">
+      <input id="chatSearch" type="text" placeholder="🔍 Поиск"
+        style="width:100%;padding:.45rem .75rem;font-size:.82rem;font-family:inherit;
+               background:var(--clr-bg);border:1px solid var(--clr-border);
+               border-radius:2rem;outline:none;">
+    </div>
+
+    <!-- Список чатов -->
+    <ul class="chat-list">
+
+      <!-- Групповые чаты -->
+      <li style="padding:.4rem 1rem .1rem;font-size:.68rem;font-weight:700;
+                 color:var(--clr-muted);text-transform:uppercase;letter-spacing:.06em;">
+        Групповые
+      </li>
+      {% for ch in chats if ch.type == 'group' %}
+      <li class="chat-list__item">
+        <a href="{{ url_for('chat', chat_id=ch.id) }}"
+           class="{{ 'is-active' if ch.id == current_chat.id else '' }}">
+          <div class="avatar avatar--sm" data-color="{{ ch.id % 8 }}">
+            {{ ch.name[0]|upper }}
+          </div>
+          <div>
+            <div class="chat-list__name">{{ ch.name }}</div>
+            <div class="chat-list__sub">Групповой чат</div>
+          </div>
+        </a>
+      </li>
+      {% endfor %}
+
+      <!-- Личные чаты -->
+      {% if chats | selectattr('type','eq','personal') | list %}
+      <li style="padding:.55rem 1rem .1rem;font-size:.68rem;font-weight:700;
+                 color:var(--clr-muted);text-transform:uppercase;letter-spacing:.06em;">
+        Личные
+      </li>
+      {% for ch in chats if ch.type == 'personal' %}
+      <li class="chat-list__item">
+        <a href="{{ url_for('chat', chat_id=ch.id) }}"
+           class="{{ 'is-active' if ch.id == current_chat.id else '' }}">
+          <div class="avatar avatar--sm" data-color="{{ (ch.id + 3) % 8 }}">
+            💬
+          </div>
+          <div>
+            <div class="chat-list__name">{{ ch.name }}</div>
+            <div class="chat-list__sub">Личный чат</div>
+          </div>
+        </a>
+      </li>
+      {% endfor %}
+      {% endif %}
+
+      <!-- Пользователи для личного чата -->
+      <li style="padding:.55rem 1rem .1rem;font-size:.68rem;font-weight:700;
+                 color:var(--clr-muted);text-transform:uppercase;letter-spacing:.06em;">
+        Написать лично
+      </li>
+      {% for u in users %}
+      <li class="chat-list__item">
+        <a href="{{ url_for('personal', partner_id=u.id) }}">
+          <div class="avatar avatar--sm" data-color="{{ u.id % 8 }}">
+            {{ u.nickname[0]|upper }}
+          </div>
+          <div>
+            <div class="chat-list__name">{{ u.nickname }}</div>
+            <div class="chat-list__sub">Открыть чат</div>
+          </div>
+        </a>
+      </li>
+      {% endfor %}
+
+    </ul>
+
+    <!-- Форма нового группового чата -->
+    <form class="new-group-form" method="post" action="{{ url_for('create_group') }}">
+      <input type="text" name="name" placeholder="Новый групповой чат..." maxlength="40">
+      <button type="submit">+</button>
+    </form>
+  </aside>
+
+  <!-- ═══ ОБЛАСТЬ ЧАТА ═══ -->
+  <main class="chat-area">
+    <header class="chat-area__header">
+      <div class="avatar avatar--lg" data-color="{{ current_chat.id % 8 }}">
+        {{ current_chat.name[0]|upper }}
+      </div>
+      <div>
+        <div class="chat-area__name">{{ current_chat.name }}</div>
+        <div class="chat-area__type">
+          {{ '👥 Групповой чат' if current_chat.type == 'group' else '💬 Личный чат' }}
+        </div>
+      </div>
+    </header>
+
+    <section id="messages" class="messages" aria-live="polite"></section>
+
+    <!-- Emoji панель -->
+    <div id="emojiPanel" class="emoji-panel" hidden>
+      <div class="emoji-panel__close">
+        <button onclick="document.getElementById('emojiPanel').hidden=true">✕ закрыть</button>
+      </div>
+      <div class="emoji-panel__grid">
+        {% for emoji in ['😀','😂','😍','🥰','😎','😭','😡','🤔','👍','👎','❤️','🔥',
+                         '💯','🎉','🙏','😘','😊','🤣','😅','😆','😋','😜','🤩','😴',
+                         '🤯','🥺','😬','🤗','😇','🤓','👀','💀','🫶','💪','🙌','✌️',
+                         '🤝','🫡','👏','🤙','💅','👌','🤌','🫳','🍕','🍔','🌮','🍜',
+                         '🍣','🍩','🍪','🎂','🍫','☕','🧋','🎁','🚀','🌟','⭐','🌈',
+                         '⚡','🌊','🎵','🎮','📱','💻','📚','🏆','🎯','💡','🐱','🐶'] %}
+        <button class="emoji-btn" type="button">{{ emoji }}</button>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Панель ввода -->
+    <div class="composer-wrap">
+      <div class="composer">
+        <button id="emojiBtn" class="composer__emoji" type="button">😊</button>
+        <input id="msgInput" type="text"
+               placeholder="Напишите сообщение... (Enter — отправить)"
+               autocomplete="off" maxlength="2000">
+        <button id="sendBtn" class="composer__send" type="button">➤</button>
+      </div>
+    </div>
+  </main>
+
+</div>
+
+<!-- Модалка редактирования -->
+<div id="editModal" class="modal-overlay" hidden>
+  <div class="modal-box">
+    <div class="modal-box__title">✏️ Редактировать сообщение</div>
+    <input id="editInput" type="text" maxlength="2000">
+    <div class="modal-box__actions">
+      <button id="editCancel" class="modal-box__btn modal-box__btn--cancel">Отмена</button>
+      <button id="editSave"   class="modal-box__btn modal-box__btn--save">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<script>
+window.__CHAT__ = {
+  meId:     {{ user_id }},
+  chatId:   {{ current_chat.id }},
+  greeting: {{ greeting | tojson }}
+};
+</script>
+<script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>

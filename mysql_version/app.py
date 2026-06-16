@@ -344,6 +344,52 @@ def api_get_messages(partner_id: int):
     return jsonify(messages)
 
 
+@app.route("/api/messages/<int:msg_id>", methods=["PUT"])
+@login_required
+def api_edit_message(msg_id: int):
+    """Редактирование своего сообщения. Принимает JSON: text."""
+    data = request.get_json(silent=True) or {}
+    text = data.get("text", "").strip()
+    if not text:
+        return jsonify({"ok": False, "message": "Пустой текст"}), 400
+
+    me_id = session["user_id"]
+
+    if using_db():
+        msg = query("SELECT owner_id FROM messages WHERE id = %s", (msg_id,), one=True)
+        if not msg or msg["owner_id"] != me_id:
+            return jsonify({"ok": False, "message": "Нет доступа"}), 403
+        query("UPDATE messages SET text = %s WHERE id = %s", (text, msg_id), commit=True)
+    else:
+        msg = next((m for m in _temp_messages if m["id"] == msg_id), None)
+        if not msg or msg["owner_id"] != me_id:
+            return jsonify({"ok": False, "message": "Нет доступа"}), 403
+        msg["text"] = text
+
+    return jsonify({"ok": True})
+
+
+@app.route("/api/messages/<int:msg_id>", methods=["DELETE"])
+@login_required
+def api_delete_message(msg_id: int):
+    """Удаление своего сообщения."""
+    me_id = session["user_id"]
+
+    if using_db():
+        msg = query("SELECT owner_id FROM messages WHERE id = %s", (msg_id,), one=True)
+        if not msg or msg["owner_id"] != me_id:
+            return jsonify({"ok": False, "message": "Нет доступа"}), 403
+        query("DELETE FROM messages WHERE id = %s", (msg_id,), commit=True)
+    else:
+        global _temp_messages
+        msg = next((m for m in _temp_messages if m["id"] == msg_id), None)
+        if not msg or msg["owner_id"] != me_id:
+            return jsonify({"ok": False, "message": "Нет доступа"}), 403
+        _temp_messages = [m for m in _temp_messages if m["id"] != msg_id]
+
+    return jsonify({"ok": True})
+
+
 @app.route("/api/messages/<int:partner_id>", methods=["POST"])
 @login_required
 def api_send_message(partner_id: int):

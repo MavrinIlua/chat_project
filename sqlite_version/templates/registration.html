@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Регистрация — ChatApp</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="auth-page">
+<div class="auth-card">
+  <div class="auth-card__icon">💬</div>
+  <h1 class="auth-card__title">ChatApp</h1>
+  <p class="auth-card__sub">Создайте аккаунт</p>
+  <form id="registerForm" method="post" action="/register">
+    <div class="field">
+      <label for="nickname">Никнейм</label>
+      <input type="text" id="nickname" name="nickname" placeholder="Придумайте никнейм" required autocomplete="username">
+    </div>
+    <div class="field">
+      <label for="password">Пароль</label>
+      <input type="password" id="password" name="password" placeholder="Минимум 6 символов" required autocomplete="new-password">
+    </div>
+    <button type="submit" class="btn">Зарегистрироваться ✨</button>
+    {% if error %}<p class="error-msg">{{ error }}</p>{% endif %}
+  </form>
+  <p class="auth-link">Уже есть аккаунт? <a href="/login">Войти</a></p>
+</div>
+<script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
